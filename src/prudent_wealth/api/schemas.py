@@ -29,6 +29,7 @@ class DeltaContent(BaseModel):
     """Delta content in streaming response."""
 
     content: str | None = None
+    reasoning_content: str | None = None
     role: str | None = None
 
 
@@ -37,7 +38,6 @@ class ChatCompletionChoice(BaseModel):
 
     index: int = 0
     delta: DeltaContent | None = None
-    message: ChatMessage | None = None
     finish_reason: str | None = None
 
 
