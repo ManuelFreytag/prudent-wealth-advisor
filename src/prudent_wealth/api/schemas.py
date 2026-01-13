@@ -38,6 +38,7 @@ class ChatCompletionChoice(BaseModel):
 
     index: int = 0
     delta: DeltaContent | None = None
+    message: ChatMessage | None = None
     finish_reason: str | None = None
 
 
