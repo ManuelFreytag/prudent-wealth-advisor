@@ -15,8 +15,8 @@ from .schemas import (
     ChatCompletionChoice,
     ChatCompletionRequest,
     ChatCompletionResponse,
-    ChatMessage,
     Usage,
+    ChatMessage,
 )
 from .streaming import stream_response
 

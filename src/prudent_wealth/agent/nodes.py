@@ -4,8 +4,8 @@ import re
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
-from ..models import AgentState, UserProfile
-from .prompts import SYSTEM_PROMPT, format_profile_summary
+from ..models import AgentState, UserProfile, RouteQuery
+from .prompts import SYSTEM_PROMPT, INTENT_CLASSIFIER_PROMPT, format_profile_summary
 
 
 def check_profile_node(state: AgentState) -> dict:
@@ -21,6 +21,29 @@ def check_profile_node(state: AgentState) -> dict:
         "profile_complete": profile.is_complete(),
         "user_profile": profile,
     }
+
+
+def create_router_node(llm):
+    """Create a router node that routes to the appropriate node based on the user's message."""
+
+    def router_node(state: AgentState) -> dict:
+        """Router node."""
+        # Build message list for LLM
+        llm_messages = [SystemMessage(content=INTENT_CLASSIFIER_PROMPT)] + list(state["messages"])
+        route_query = llm.with_structured_output(RouteQuery).invoke(llm_messages)
+        return {"intent": route_query.destination}
+
+    return router_node
+
+
+def create_smalltalk_node(llm):
+    """Create a smalltalk node with the given LLM."""
+
+    def smalltalk_node(state: AgentState) -> dict:
+        """Smalltalk node."""
+        return {"messages": [llm.invoke(list(state["messages"]))]}
+
+    return smalltalk_node
 
 
 def create_agent_node(llm):

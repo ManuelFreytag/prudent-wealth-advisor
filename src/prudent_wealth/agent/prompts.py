@@ -41,6 +41,17 @@ Use these tools to provide data-backed advice. Use web_search when you need rece
 {profile_summary}
 """
 
+INTENT_CLASSIFIER_PROMPT = """You are an expert intent classifier for a customer support bot.
+
+Your job is to analyze the user's input and determine the next step.
+1. **Small Talk**: If the user is greeting you, asking "how are you", or chatting casually or asks for simple summaries, route to `small_talk`.
+2. **Task**: If the user asks for financial advice, route to `main_agent`.
+
+Examples:
+- "Hi, how are you?" -> destination: "small_talk"
+- "I need your financial advice." -> destination: "main_agent"
+"""
+
 
 def format_profile_summary(profile: UserProfile) -> str:
     """Format user profile for inclusion in system prompt."""
