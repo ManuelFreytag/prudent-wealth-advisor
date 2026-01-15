@@ -51,7 +51,6 @@ async def chat_completions(
     """
     logger.info(request)
     graph = await get_agent(temperature=request.temperature)
-    logger.info(request)
 
     # Convert OpenAI messages to LangChain format
     lc_messages = []
@@ -62,8 +61,6 @@ async def chat_completions(
 
     # Use user ID as thread_id, or generate one
     thread_id = request.user or f"anonymous-{uuid.uuid4().hex[:8]}"
-
-    logger.info(request)
 
     if request.stream:
         logger.info("Streaming response")
@@ -78,7 +75,6 @@ async def chat_completions(
         )
     else:
         logger.info("Non-streaming response")
-        logger.info(request)
         # Non-streaming response
         config = {"configurable": {"thread_id": thread_id}}
         result = await graph.ainvoke({"messages": lc_messages}, config=config)
