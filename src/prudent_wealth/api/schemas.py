@@ -18,11 +18,11 @@ class ChatCompletionRequest(BaseModel):
     model: str = "prudent-wealth-steward"
     messages: list[ChatMessage]
     stream: bool = True
-    user: str | None = Field(
-        default=None, description="User ID, used as thread_id for conversation persistence"
-    )
     temperature: float | None = Field(default=0.2, ge=0, le=2)
     max_tokens: int | None = None
+    chat_id: str | None = Field(
+        default=None, description="Chat ID, used as thread_id for conversation persistence"
+    )
 
 
 class DeltaContent(BaseModel):

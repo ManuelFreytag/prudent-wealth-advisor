@@ -57,10 +57,8 @@ async def chat_completions(
     for msg in request.messages:
         if msg.role == "user":
             lc_messages.append(HumanMessage(content=msg.content))
-        # Note: System and assistant messages could be handled if needed
 
-    # Use user ID as thread_id, or generate one
-    thread_id = request.user or f"anonymous-{uuid.uuid4().hex[:8]}"
+    thread_id = request.chat_id or f"anonymous-{uuid.uuid4().hex[:8]}"
 
     if request.stream:
         logger.info("Streaming response")
