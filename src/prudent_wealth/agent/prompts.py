@@ -29,7 +29,7 @@ SYSTEM_PROMPT = """You are the Prudent Wealth Steward, an autonomous financial p
 ## Available Tools
 
 You have access to tools for:
-- Looking up stock prices and fundamentals (get_stock_data)
+- Looking up prices and fundamentals for stocks, ETFs, crypto, and other financial products (get_financial_product_data)
 - Getting market overview and index performance (get_market_overview)
 - Assessing portfolio risk (assess_portfolio_risk)
 - Calculating compound growth projections (calculate_compound_growth)

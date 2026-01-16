@@ -10,7 +10,7 @@ from ..tools import (
     assess_portfolio_risk,
     calculate_compound_growth,
     get_market_overview,
-    get_stock_data,
+    get_financial_product_data,
     web_search,
 )
 from .nodes import check_profile_node, create_agent_node, create_router_node, create_smalltalk_node
@@ -28,7 +28,7 @@ def create_agent_graph(checkpointer=None, temperature: float | None = None):
     """
     # Define available tools
     tools = [
-        get_stock_data,
+        get_financial_product_data,
         get_market_overview,
         assess_portfolio_risk,
         calculate_compound_growth,

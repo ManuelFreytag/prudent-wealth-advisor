@@ -8,8 +8,8 @@ import pytest
 from src.prudent_wealth.tools.calculators import calculate_compound_growth
 from src.prudent_wealth.tools.yfinance_tools import (
     assess_portfolio_risk,
+    get_financial_product_data,
     get_market_overview,
-    get_stock_data,
 )
 
 
@@ -96,11 +96,11 @@ class TestUserProfile:
         assert profile.is_complete()
 
 
-class TestGetStockData:
-    """Tests for the get_stock_data tool."""
+class TestGetFinancialProductData:
+    """Tests for the get_financial_product_data tool."""
 
     @patch("src.prudent_wealth.tools.yfinance_tools.yf.Ticker")
-    def test_get_stock_data_success(self, mock_ticker_class):
+    def test_get_financial_product_data_success(self, mock_ticker_class):
         """Test successful stock data retrieval."""
         # Create mock ticker instance
         mock_ticker = MagicMock()
@@ -131,7 +131,7 @@ class TestGetStockData:
         )
         mock_ticker.history.return_value = mock_history
 
-        result = get_stock_data.invoke({"symbol": "AAPL", "period": "1mo"})
+        result = get_financial_product_data.invoke({"symbol": "AAPL", "period": "1mo"})
 
         assert result["symbol"] == "AAPL"
         assert result["name"] == "Apple Inc."
@@ -142,14 +142,50 @@ class TestGetStockData:
         assert result["history_summary"]["end_price"] == 175.5
 
     @patch("src.prudent_wealth.tools.yfinance_tools.yf.Ticker")
-    def test_get_stock_data_error(self, mock_ticker_class):
+    def test_get_financial_product_data_error(self, mock_ticker_class):
         """Test error handling when stock data retrieval fails."""
         mock_ticker_class.side_effect = Exception("API Error")
 
-        result = get_stock_data.invoke({"symbol": "INVALID"})
+        result = get_financial_product_data.invoke({"symbol": "INVALID"})
 
         assert "error" in result
         assert result["symbol"] == "INVALID"
+
+    @patch("src.prudent_wealth.tools.yfinance_tools.yf.Ticker")
+    def test_get_etf_data_success(self, mock_ticker_class):
+        """Test successful ETF data retrieval with specific fields."""
+        mock_ticker = MagicMock()
+        mock_ticker_class.return_value = mock_ticker
+
+        mock_ticker.info = {
+            "longName": "Vanguard S&P 500 ETF",
+            "quoteType": "ETF",
+            "category": "Large Blend",
+            "netExpenseRatio": 0.03,
+            "fundFamily": "Vanguard",
+            "totalAssets": 1000000000,
+            "ytdReturn": 0.15,
+            "beta3Year": 1.0,
+            "currentPrice": 400.0,
+            "previousClose": 398.0,
+            # Some standard fields might be missing or present
+            "fiftyTwoWeekHigh": 410.0,
+            "fiftyTwoWeekLow": 350.0,
+        }
+
+        # Mock history with some data
+        mock_ticker.history.return_value = pd.DataFrame(
+            {"Close": [390.0, 400.0], "High": [401.0, 402.0], "Low": [389.0, 399.0]}
+        )
+
+        result = get_financial_product_data.invoke({"symbol": "VOO"})
+
+        assert result["symbol"] == "VOO"
+        assert result["type"] == "ETF"
+        assert result["category"] == "Large Blend"
+        assert result["expense_ratio"] == 0.03
+        assert result["family"] == "Vanguard"
+        assert result["market_cap"] == 1000000000  # Fallback from totalAssets
 
 
 class TestGetMarketOverview:
@@ -271,19 +307,20 @@ class TestAssessPortfolioRisk:
         assert "warning" in result
 
     @patch("src.prudent_wealth.tools.yfinance_tools.yf.Ticker")
-    def test_assess_portfolio_risk_etf_detection(self, mock_ticker_class):
-        """Test that ETFs are properly categorized."""
+    def test_assess_portfolio_risk_etf_category_fallback(self, mock_ticker_class):
+        """Test that ETFs use category when sector is unknown."""
         mock = MagicMock()
         mock.info = {
             "longName": "Vanguard S&P 500 ETF",
             "sector": "Unknown",
             "quoteType": "ETF",
+            "category": "Large Blend",
         }
         mock.history.return_value = pd.DataFrame(
-            {"Close": [100, 101, 102], "High": [101, 102, 103], "Low": [99, 100, 101]}
+            {"Close": [100, 101], "High": [101, 102], "Low": [99, 100]}
         )
         mock_ticker_class.return_value = mock
 
         result = assess_portfolio_risk.invoke({"holdings": [{"symbol": "VOO", "weight": 100}]})
 
-        assert "ETF/Fund" in result.get("sector_breakdown", {})
+        assert "Large Blend" in result.get("sector_breakdown", {})

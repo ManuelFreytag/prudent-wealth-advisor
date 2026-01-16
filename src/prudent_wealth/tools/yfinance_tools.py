@@ -6,17 +6,23 @@ import yfinance as yf
 from langchain_core.tools import tool
 
 
-@tool
-def get_stock_data(
-    symbol: Annotated[str, "Stock ticker symbol (e.g., 'AAPL', 'MSFT', 'VOO')"],
-    period: Annotated[
-        str, "Time period: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max"
-    ] = "1mo",
+@tool(
+    "get_financial_product_data",
+    description="Get price data and fundamentals for stocks, stocks, ETFs, crypto, and other financial products. Use this to lookup data for any asset class supported by Yahoo Finance.",
+)
+def get_financial_product_data(
+    symbol: Annotated[str, "Ticker symbol (e.g., 'AAPL', 'VOO', 'BTC-USD', 'GC=F')"],
+    period: Annotated[str, "Time period: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max"] = "1mo",
 ) -> dict:
-    """Get stock price data, fundamentals, and recent history for a ticker symbol.
+    """Get price data and fundamentals for stocks, ETFs, crypto, and other financial products.
 
-    Use this tool to look up current prices, historical performance, P/E ratios,
-    dividend yields, and other fundamental data for individual stocks or ETFs.
+    Use this tool to lookup data for any asset class supported by Yahoo Finance, including:
+    - Stocks (e.g., AAPL)
+    - ETFs (e.g., VOO, QQ)
+    - Cryptocurrencies (e.g., BTC-USD)
+    - Futures/Commodities (e.g., GC=F for Gold)
+
+    Returns prices, fundamentals (P/E, yield), and ETF-specific data (expense ratio, category).
     """
     try:
         ticker = yf.Ticker(symbol)
@@ -33,37 +39,67 @@ def get_stock_data(
                 "high": round(float(history["High"].max()), 2),
                 "low": round(float(history["Low"].min()), 2),
                 "percent_change": round(
-                    ((history["Close"].iloc[-1] - history["Close"].iloc[0])
-                     / history["Close"].iloc[0])
+                    (
+                        (history["Close"].iloc[-1] - history["Close"].iloc[0])
+                        / history["Close"].iloc[0]
+                    )
                     * 100,
                     2,
                 ),
             }
 
-        return {
+        data = {
             "symbol": symbol.upper(),
             "name": info.get("longName", symbol),
-            "current_price": info.get("currentPrice") or info.get("regularMarketPrice"),
+            "type": info.get("quoteType", "Unknown"),
+            "current_price": info.get("currentPrice")
+            or info.get("regularMarketPrice")
+            or info.get("navPrice"),
             "previous_close": info.get("previousClose"),
-            "market_cap": info.get("marketCap"),
-            "pe_ratio": info.get("trailingPE"),
-            "forward_pe": info.get("forwardPE"),
-            "dividend_yield": info.get("dividendYield"),
+            "market_cap": info.get("marketCap") or info.get("totalAssets"),
             "52_week_high": info.get("fiftyTwoWeekHigh"),
             "52_week_low": info.get("fiftyTwoWeekLow"),
-            "sector": info.get("sector"),
-            "industry": info.get("industry"),
             "history_summary": history_summary,
         }
+
+        # Add specific fields based on asset type
+        quote_type = info.get("quoteType", "").upper()
+
+        if "ETF" in quote_type or "MUTUALFUND" in quote_type:
+            data.update(
+                {
+                    "category": info.get("category"),
+                    "expense_ratio": info.get("netExpenseRatio")
+                    or info.get("annualReportExpenseRatio"),
+                    "family": info.get("fundFamily"),
+                    "yield": info.get("yield"),
+                    "ytd_return": info.get("ytdReturn"),
+                    "beta_3y": info.get("beta3Year"),
+                }
+            )
+
+        # Add fundamental data for equities if available
+        # (Some of these might also apply to ETFs, but are traditional stock metrics)
+        data.update(
+            {
+                "pe_ratio": info.get("trailingPE"),
+                "forward_pe": info.get("forwardPE"),
+                "dividend_yield": info.get("dividendYield"),
+                "sector": info.get("sector"),
+                "industry": info.get("industry"),
+            }
+        )
+
+        # Clean up None values to keep response clean
+        return {k: v for k, v in data.items() if v is not None}
+
     except Exception as e:
         return {"error": str(e), "symbol": symbol}
 
 
 @tool
 def get_market_overview(
-    indices: Annotated[
-        list[str] | None, "List of index symbols to check"
-    ] = None,
+    indices: Annotated[list[str] | None, "List of index symbols to check"] = None,
 ) -> dict:
     """Get overview of major market indices and their current performance.
 
@@ -149,8 +185,8 @@ def assess_portfolio_risk(
 
             # Sector tracking
             sector = info.get("sector", "Unknown")
-            if sector == "Unknown" and "ETF" in info.get("quoteType", ""):
-                sector = "ETF/Fund"
+            if (sector == "Unknown" or sector is None) and "ETF" in info.get("quoteType", ""):
+                sector = info.get("category", "ETF/Fund")
             sector_breakdown[sector] = sector_breakdown.get(sector, 0) + weight
             detail["sector"] = sector
 
