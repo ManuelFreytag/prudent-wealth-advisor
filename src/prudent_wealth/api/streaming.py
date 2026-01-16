@@ -53,6 +53,7 @@ async def stream_response(
     messages: list,
     thread_id: str,
     model_name: str = "prudent-wealth-steward",
+    ignore_nodes: list = [],
 ) -> AsyncGenerator[str, None]:
     """Stream agent responses using LangGraph's native 'updates' and 'messages' modes.
 
@@ -76,7 +77,7 @@ async def stream_response(
         chunk, node_info = payload
 
         # Ignore streaming messages from the router node
-        if node_info.get("langgraph_node") != "router":
+        if node_info.get("langgraph_node") not in ignore_nodes:
             choice = parse_message_chunk(chunk)
 
             # If a valid delta was parsed, yield it as SSE

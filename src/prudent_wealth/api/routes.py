@@ -7,7 +7,7 @@ import logging
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
-
+from ..config import settings
 from ..agent.graph import create_agent_graph
 from .auth import verify_token
 from .database import get_checkpointer
@@ -63,7 +63,13 @@ async def chat_completions(
     if request.stream:
         logger.info("Streaming response")
         return StreamingResponse(
-            stream_response(graph, lc_messages, thread_id, request.model),
+            stream_response(
+                graph,
+                lc_messages,
+                thread_id,
+                request.model,
+                ignore_nodes=settings.ignore_nodes,
+            ),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",

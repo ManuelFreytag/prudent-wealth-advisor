@@ -28,5 +28,8 @@ class Settings(BaseSettings):
     port: int = 8000
     debug: bool = False
 
+    # API
+    ignore_nodes: list = ["router", "tools", "check_profile"]
+
 
 settings = Settings()
