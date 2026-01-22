@@ -46,7 +46,7 @@ def parse_message_chunk(chunk: BaseMessage) -> Optional[ChatCompletionChoice]:
             if item.get("type") == "thinking":
                 # Format thinking blocks inside tags for the UI
                 delta = DeltaContent(
-                    reasoning_content=re.sub(r"\n{1,}", "\\n", item["thinking"]),
+                    reasoning_content=re.sub(r"\n{1,}", "\n", item["thinking"]),
                     role="assistant",
                 )
 
@@ -54,7 +54,7 @@ def parse_message_chunk(chunk: BaseMessage) -> Optional[ChatCompletionChoice]:
             elif item.get("type") == "text":
                 # avoid double newlines which signals new chunk
                 delta = DeltaContent(
-                    content=re.sub(r"\n{1,}", "\\n", item["text"]),
+                    content=re.sub(r"\n{1,}", "\n", item["text"]),
                     role="assistant",
                 )
 
@@ -96,26 +96,23 @@ async def stream_response(
         ignore_nodes = []
 
     is_first_chunk = True
-    content_buffer = ""
-    reasoning_buffer = ""
+    buffers = {"content": "", "reasoning_content": ""}
 
-    async def yield_from_buffer(buffer_text: str, field_name: str, is_final: bool = False):
+    async def flush_buffer(field_name: str, is_final: bool = False):
         nonlocal is_first_chunk
+        buffer_text = buffers[field_name]
 
-        # If final, yield everything
         if is_final:
             to_yield = buffer_text
-            remaining = ""
+            buffers[field_name] = ""
         else:
-            # Find last escaped newline (\n)
             last_newline_idx = buffer_text.rfind("\n")
             if last_newline_idx == -1:
-                # No escaped newline, just return the buffer as remaining
-                yield None, buffer_text
                 return
+
             # Include the \n in the yielded content (+1 for the character)
             to_yield = buffer_text[: last_newline_idx + 1]
-            remaining = buffer_text[last_newline_idx + 1 :]
+            buffers[field_name] = buffer_text[last_newline_idx + 1 :]
 
         if to_yield:
             delta_kwargs = {field_name: to_yield}
@@ -132,55 +129,39 @@ async def stream_response(
                 model=model_name,
                 choices=[choice],
             )
-            yield "data: " + completion_chunk.model_dump_json(
-                exclude_unset=True
-            ) + "\n\n", remaining
-        else:
-            yield None, remaining
+            yield "data: " + completion_chunk.model_dump_json(exclude_unset=True) + "\n\n"
 
     async for mode, payload in graph.astream(
         {"messages": messages},
         config=config,
         stream_mode=["messages"],
     ):
-        # Payload in 'messages' mode is a tuple: (chunk, metadata)
+        # Ensure we only process 'messages' mode and have a valid payload tuple
+        if mode != "messages" or not isinstance(payload, tuple) or len(payload) != 2:
+            continue
+
         chunk, node_info = payload
 
-        # Ignore streaming messages from the router node
-        if node_info.get("langgraph_node") not in ignore_nodes:
-            choice = parse_message_chunk(chunk)
+        # Ignore non-agent nodes
+        if node_info.get("langgraph_node") in ignore_nodes:
+            continue
 
-            # If a valid delta was parsed, buffer it
-            if choice:
-                if choice.delta.content:
-                    content_buffer += choice.delta.content
-                    async for sse, remaining in yield_from_buffer(content_buffer, "content"):
-                        if sse:
-                            logger.info(sse)
-                            yield sse
-                        content_buffer = remaining
+        choice = parse_message_chunk(chunk)
+        if not choice:
+            continue
 
-                if choice.delta.reasoning_content:
-                    reasoning_buffer += choice.delta.reasoning_content
-                    async for sse, remaining in yield_from_buffer(
-                        reasoning_buffer, "reasoning_content"
-                    ):
-                        if sse:
-                            logger.info(sse)
-                            yield sse
-                        reasoning_buffer = remaining
+        # Update buffers and yield if boundary reached
+        for field in ["content", "reasoning_content"]:
+            val = getattr(choice.delta, field, None)
+            if val:
+                buffers[field] += val
+                async for sse in flush_buffer(field):
+                    yield sse
 
-    # Flush remaining buffers
-    if content_buffer:
-        async for sse, _ in yield_from_buffer(content_buffer, "content", is_final=True):
-            logger.info(sse)
-            if sse:
-                yield sse
-    if reasoning_buffer:
-        async for sse, _ in yield_from_buffer(reasoning_buffer, "reasoning_content", is_final=True):
-            logger.info(sse)
-            if sse:
-                yield sse
+    # Final flush
+    for field in ["content", "reasoning_content"]:
+        async for sse in flush_buffer(field, is_final=True):
+            yield sse
 
     # Send final [DONE] event
     choice = ChatCompletionChoice(delta=DeltaContent(), index=0, finish_reason="stop")
