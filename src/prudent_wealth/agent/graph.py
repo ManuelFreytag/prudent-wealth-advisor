@@ -37,14 +37,15 @@ def create_agent_graph(checkpointer=None, temperature: float | None = None):
 
     # Simple LLM for basic questions
     simple_llm = ChatGoogleGenerativeAI(
-        model="gemini-3-flash-preview", google_api_key=settings.google_api_key
+        model="gemini-3-flash-preview",
+        google_api_key=settings.google_api_key,
     )
 
     # Initialize the LLM with tools
     llm = ChatGoogleGenerativeAI(
         model=settings.gemini_model,
         google_api_key=settings.google_api_key,
-        temperature=temperature,
+        temperature=temperature if temperature is not None else 0.0,
         include_thoughts=True,
     ).bind_tools(tools)
 
@@ -79,15 +80,9 @@ def create_agent_graph(checkpointer=None, temperature: float | None = None):
     # Conditional routing from agent: financial advice or finish
     def should_advice(state: AgentState) -> str:
         """Determine if the agent should provide financial advice or finish."""
-        intent = state["intent"]
-        if not intent:
-            return "end"
-
-        if intent == "small_talk":
-            return "smalltalk"
-        if intent == "main_agent":
-            return "agent"
-        return "end"
+        intent = state.get("intent")
+        mapping = {"small_talk": "smalltalk", "main_agent": "agent"}
+        return mapping.get(intent, "end")
 
     workflow.add_conditional_edges(
         "router",
@@ -98,12 +93,8 @@ def create_agent_graph(checkpointer=None, temperature: float | None = None):
     # Conditional routing from agent: use tools or finish
     def should_use_tools(state: AgentState) -> str:
         """Determine if the agent should use tools or finish."""
-        messages = state["messages"]
-        if not messages:
-            return "end"
-
-        last_message = messages[-1]
-        if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        last_message = state["messages"][-1] if state["messages"] else None
+        if getattr(last_message, "tool_calls", None):
             return "tools"
         return "end"
 

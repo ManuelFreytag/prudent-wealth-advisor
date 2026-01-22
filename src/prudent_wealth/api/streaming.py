@@ -58,6 +58,10 @@ def parse_message_chunk(chunk: BaseMessage) -> Optional[ChatCompletionChoice]:
                     role="assistant",
                 )
 
+            else:
+                # Unknown block type, skip
+                return None
+
             return ChatCompletionChoice(delta=delta, finish_reason=None)
 
 
@@ -66,7 +70,7 @@ async def stream_response(
     messages: list,
     thread_id: str,
     model_name: str = "prudent-wealth-steward",
-    ignore_nodes: list = [],
+    ignore_nodes: list | None = None,
 ) -> AsyncGenerator[str, None]:
     """
     Stream agent responses using LangGraph's native 'messages' mode.
@@ -88,6 +92,8 @@ async def stream_response(
     """
     response_id = f"{CHAT_COMPLETION_PREFIX}{uuid.uuid4().hex[:12]}"
     config = {"configurable": {"thread_id": thread_id}}
+    if ignore_nodes is None:
+        ignore_nodes = []
 
     is_first_chunk = True
     content_buffer = ""
@@ -112,7 +118,7 @@ async def stream_response(
             remaining = buffer_text[last_newline_idx + 1 :]
 
         if to_yield:
-            delta_kwargs = {field_name: to_yield + " "}  # TODO test if a trailing space is needed
+            delta_kwargs = {field_name: to_yield + " "}
             if is_first_chunk:
                 delta_kwargs["role"] = "assistant"
                 is_first_chunk = False
@@ -155,7 +161,6 @@ async def stream_response(
                         content_buffer = remaining
 
                 if choice.delta.reasoning_content:
-                    pass
                     reasoning_buffer += choice.delta.reasoning_content
                     async for sse, remaining in yield_from_buffer(
                         reasoning_buffer, "reasoning_content"

@@ -201,17 +201,18 @@ def assess_portfolio_risk(
     )
 
     # Determine risk level
+    risk_level = "Unable to assess"
     if weighted_vol:
-        if weighted_vol < 12:
-            risk_level = "Low"
-        elif weighted_vol < 18:
-            risk_level = "Moderate"
-        elif weighted_vol < 25:
-            risk_level = "Moderately High"
-        else:
-            risk_level = "High"
-    else:
-        risk_level = "Unable to assess"
+        thresholds = [
+            (12, "Low"),
+            (18, "Moderate"),
+            (25, "Moderately High"),
+            (float("inf"), "High"),
+        ]
+        for limit, level in thresholds:
+            if weighted_vol < limit:
+                risk_level = level
+                break
 
     return {
         "portfolio_volatility": round(weighted_vol, 2) if weighted_vol else None,

@@ -93,17 +93,21 @@ def extract_profile_updates(messages: list[BaseMessage]) -> dict:
                 break
 
         # Extract risk tolerance
-        if "conservative" in content and "risk" in content:
-            updates["risk_tolerance"] = "conservative"
-        elif "aggressive" in content and "risk" in content:
-            updates["risk_tolerance"] = "aggressive"
-        elif "moderate" in content and "risk" in content:
-            updates["risk_tolerance"] = "moderate"
-        # Also check for direct statements
-        elif "i prefer conservative" in content or "low risk" in content:
-            updates["risk_tolerance"] = "conservative"
-        elif "i prefer aggressive" in content or "high risk" in content:
-            updates["risk_tolerance"] = "aggressive"
+        risk_keywords = {
+            "conservative": ["conservative risk", "i prefer conservative", "low risk"],
+            "aggressive": ["aggressive risk", "i prefer aggressive", "high risk"],
+            "moderate": ["moderate risk"],
+        }
+        for level, keywords in risk_keywords.items():
+            if any(kw in content for kw in keywords):
+                updates["risk_tolerance"] = level
+                break
+        if "risk_tolerance" not in updates:
+            # Fallback for simple single-word mentions if combined with 'risk'
+            for level in ["conservative", "moderate", "aggressive"]:
+                if level in content and "risk" in content:
+                    updates["risk_tolerance"] = level
+                    break
 
         # Extract time horizon
         horizon_patterns = [
