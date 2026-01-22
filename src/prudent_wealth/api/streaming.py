@@ -15,8 +15,8 @@ from langchain_core.messages import AIMessageChunk, BaseMessage
 from .schemas import ChatCompletionChunk, ChatCompletionChoice, DeltaContent
 
 logger = logging.getLogger(__name__)
- 
- CHAT_COMPLETION_PREFIX = "chatcmpl-"
+
+CHAT_COMPLETION_PREFIX = "chatcmpl-"
 
 
 def parse_message_chunk(chunk: BaseMessage) -> Optional[ChatCompletionChoice]:
@@ -118,7 +118,7 @@ async def stream_response(
             remaining = buffer_text[last_newline_idx + 1 :]
 
         if to_yield:
-            delta_kwargs = {field_name: to_yield + " "}
+            delta_kwargs = {field_name: to_yield}
             if is_first_chunk:
                 delta_kwargs["role"] = "assistant"
                 is_first_chunk = False
