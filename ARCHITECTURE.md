@@ -12,23 +12,29 @@
 │                             │                               │
 │  ┌──────────────────────────▼──────────────────────────┐   │
 │  │                  LangGraph Agent                     │   │
-│  │  ┌────────────┐    ┌────────────┐    ┌──────────┐   │   │
-│  │  │   Check    │───▶│   ReAct    │───▶│  Format  │   │   │
-│  │  │  Profile   │    │    Loop    │    │ Response │   │   │
-│  │  └────────────┘    └─────┬──────┘    └──────────┘   │   │
-│  │                          │                           │   │
-│  │         ┌────────────────┼────────────────┐          │   │
-│  │         ▼                ▼                ▼          │   │
-│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐     │   │
-│  │  │  yfinance  │  │  Google    │  │ Calculator │     │   │
-│  │  │   Tool     │  │  Search    │  │   Tools    │     │   │
-│  │  └────────────┘  └────────────┘  └────────────┘     │   │
+│  │        ┌────────────┐        ┌──────────────┐        │   │
+│  │        │   Router   ├───────▶│  Smalltalk   │        │   │
+│  │        └─────┬──────┘        └──────┬───────┘        │   │
+│  │              │                      │                │   │
+│  │              ▼                      │                │   │
+│  │        ┌────────────┐               │                │   │
+│  │        │   Agent    │◀──────────────┤                │   │
+│  │        │ (ReAct Loop)             (END)              │   │
+│  │        └─────┬──────┘                                │   │
+│  │              │                                       │   │
+│  │      ┌───────┴───────┐                               │   │
+│  │      ▼               ▼                               │   │
+│  │  ┌────────────┐  ┌────────────┐                      │   │
+│  │  │  yfinance  │  │  Google    │                      │   │
+│  │  │   Tools   │  │  Search    │                      │   │
+│  │  └────────────┘  └────────────┘                      │   │
 │  └──────────────────────────┬──────────────────────────┘   │
 │                             │                               │
 │  ┌──────────────────────────▼──────────────────────────┐   │
 │  │              PostgreSQL Checkpointer                 │   │
 │  │         (Conversation State + User Profiles)         │   │
 │  └─────────────────────────────────────────────────────┘   │
+│                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -39,29 +45,29 @@
 | LLM | Gemini 3.0 Pro | via `langchain-google-genai` |
 | Web Search | Gemini Google Search grounding | Native Gemini capability |
 | Financial Data | yfinance | Wrapped as LangGraph tool |
-| Orchestration | LangGraph | ReAct pattern with checkpointing |
+| Orchestration | LangGraph | StateGraph with conditional routing |
 | Persistence | PostgreSQL | `langgraph-checkpoint-postgres` |
 | API | FastAPI | SSE streaming, OpenAI schema |
 | Config | pydantic-settings | Type-safe env handling |
 
 ## Agent Workflow
 
-### ReAct Loop Pattern
+### Intent-Based Routing
 
-The agent follows a ReAct (Reason + Act) pattern:
+The agent uses a two-stage routing mechanism:
 
-1. **Profile Check**: If user profile is incomplete, agent asks clarifying questions before providing financial advice
-2. **Reasoning**: Agent thinks through the query (exposed in `<think>` tags for transparency)
-3. **Tool Use**: Calls yfinance for market data or Google Search for current information
-4. **Response**: Delivers educational, conservative-biased advice
+1.  **Routing**: A lightweight LLM (Gemini Flash) classifies the user intent as either `small_talk` or `main_agent`.
+2.  **Smalltalk**: If the intent is social or general, the smalltalk agent responds directly.
+3.  **ReAct Loop**: If the intent is financial, the main agent enters a reasoning loop, utilizing tools as needed to provide conservative advice.
 
 ### Graph Nodes
 
 | Node | Purpose |
 |------|---------|
-| `check_profile` | Verify user profile completeness (age, risk tolerance, time horizon, goals) |
-| `react_loop` | Core reasoning and tool-calling loop |
-| `format_response` | Apply educational tone, add explanations |
+| `router` | Classifies user intent and routes to the appropriate node |
+| `smalltalk` | Handles non-financial or social interaction |
+| `agent` | Core reasoning and tool-calling loop for financial advice |
+| `tools` | Executes financial data and search tools |
 
 ## State Schema
 
@@ -75,6 +81,7 @@ class UserProfile(BaseModel):
 
 class AgentState(TypedDict):
     """LangGraph state for the financial advisor agent."""
+    intent: Literal["small_talk", "main_agent"]
     messages: Annotated[list[BaseMessage], add_messages]
     user_profile: UserProfile
     profile_complete: bool
@@ -84,9 +91,9 @@ class AgentState(TypedDict):
 
 | Tool | Purpose | Implementation |
 |------|---------|----------------|
-| `get_stock_data` | Price, fundamentals, history | yfinance wrapper |
+| `get_financial_product_data` | Price, fundamentals, history | yfinance wrapper |
 | `get_market_overview` | Index performance, sector trends | yfinance batch query |
-| `google_search` | Current events, news, grounding | Gemini native search |
+| `web_search` | Current events, news, grounding | Gemini native search |
 | `calculate_compound_growth` | Investment projections | Pure Python |
 | `assess_portfolio_risk` | Risk metrics calculation | yfinance + statistics |
 
@@ -119,17 +126,16 @@ POST /v1/chat/completions
     {"role": "user", "content": "Should I invest in index funds?"}
   ],
   "stream": true,
-  "user": "user_123"
+  "chat_id": "chat_123"
 }
 ```
 
 ### Response Stream Format
 
-Server-Sent Events with thinking exposed:
+Server-Sent Events with reasoning steps:
 
 ```
-data: {"choices": [{"delta": {"content": "<think>User is asking about index funds..."}}]}
-data: {"choices": [{"delta": {"content": "</think>"}}]}
+data: {"choices": [{"delta": {"reasoning_content": "User is asking about index funds..."}}]}
 data: {"choices": [{"delta": {"content": "Index funds are an excellent choice..."}}]}
 data: [DONE]
 ```
